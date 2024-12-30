@@ -1,0 +1,55 @@
+name: Java CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up JDK 11
+      uses: actions/setup-java@v2
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+        
+    - name: Build with Maven
+      run: mvn clean package
+      
+    - name: Run tests
+      run: mvn test
+      
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: calculator-jar
+        path: target/calculator-*-jar-with-dependencies.jar
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v2
+      with:
+        name: calculator-jar
+        
+    - name: Deploy to server
+      env:
+        PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        HOST: ${{ secrets.SERVER_HOST }}
+        USER: ${{ secrets.SERVER_USER }}
+      run: |
+        echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+        scp -i private_key -o StrictHostKeyChecking=no calculator-*-jar-with-dependencies.jar ${USER}@${HOST}:~/
+        ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} 'java -jar ~/calculator-*-jar-with-dependencies.jar'
